@@ -1,3 +1,4 @@
+"use client";
 import { CalendarCheck, Cpu, Users } from "lucide-react";
 import MetricCard from "../../../components/MetricCard";
 import ActivityFeed from "../../../components/ActivityFeed";
