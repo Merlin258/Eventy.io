@@ -12,7 +12,18 @@ interface ActivityEntry {
   type: "register" | "signup" | "login" | "cancel";
 }
 
-const activity: ActivityEntry[] = [
+export interface RealActivity {
+  student_id: string;
+  student_name: string;
+  event_name: string;
+  registration_time: string;
+}
+
+interface ActivityFeedProps {
+  activities?: RealActivity[];
+}
+
+const mockActivity: ActivityEntry[] = [
   { id: "a1", actor: "John Doe", action: "registered for", target: "AI Workshop", time: "12s ago", type: "register" },
   { id: "a2", actor: "Maria Chen", action: "created an account", target: "", time: "48s ago", type: "signup" },
   { id: "a3", actor: "Admin (S. Kessler)", action: "published", target: "Startup Pitch Night", time: "2m ago", type: "register" },
@@ -29,7 +40,24 @@ const typeStyles: Record<ActivityEntry["type"], { icon: typeof UserPlus; classes
   cancel: { icon: XCircle, classes: "text-red-400 bg-red-500/10 border-red-500/20" },
 };
 
-export default function ActivityFeed() {
+function formatTime(timeString: string) {
+  const d = new Date(timeString);
+  if (isNaN(d.getTime())) return timeString;
+  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+export default function ActivityFeed({ activities }: ActivityFeedProps) {
+  const feedData: ActivityEntry[] = activities 
+    ? activities.map(a => ({
+        id: a.student_id + a.event_name,
+        actor: a.student_name,
+        action: "registered for",
+        target: a.event_name,
+        time: formatTime(a.registration_time),
+        type: "register"
+      }))
+    : mockActivity;
+
   return (
     <div className="rounded-2xl border border-white/10 bg-zinc-900 p-6">
       <div className="mb-5 flex items-center justify-between">
@@ -44,7 +72,7 @@ export default function ActivityFeed() {
       </div>
 
       <ul className="space-y-1">
-        {activity.map((entry, i) => {
+        {feedData.map((entry, i) => {
           const { icon: Icon, classes } = typeStyles[entry.type];
           return (
             <motion.li

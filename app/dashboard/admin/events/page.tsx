@@ -1,9 +1,12 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { ChevronLeft, ChevronRight, Search } from "lucide-react";
+import { useMemo, useState, useEffect } from "react";
+import { ChevronLeft, ChevronRight, Search, Plus } from "lucide-react";
 import RowActionsMenu from "@/components/RowActionsMenu";
 import DeleteEventDialog from "@/components/DeleteEventDialog";
+import { useToast } from '@/components/ui/Toast';
+import AdminEventModal from '@/components/AdminEventModal';
+import type { EventFormData } from '@/components/AdminEventModal';
 
 type EventStatus = "Published" | "Draft" | "Cancelled";
 
@@ -16,23 +19,6 @@ interface EventRow {
   status: EventStatus;
 }
 
-const initialEvents: EventRow[] = [
-  { id: "EVT-1001", name: "Intro to Machine Learning Workshop", date: "Aug 3, 2026", registered: 42, capacity: 50, status: "Published" },
-  { id: "EVT-1002", name: "Fall Welcome Mixer", date: "Aug 5, 2026", registered: 200, capacity: 200, status: "Published" },
-  { id: "EVT-1003", name: "Research Symposium: Climate Systems", date: "Aug 8, 2026", registered: 95, capacity: 120, status: "Published" },
-  { id: "EVT-1004", name: "Intramural Basketball Finals", date: "Aug 9, 2026", registered: 60, capacity: 60, status: "Published" },
-  { id: "EVT-1005", name: "Resume Review with Alumni", date: "Aug 11, 2026", registered: 18, capacity: 30, status: "Draft" },
-  { id: "EVT-1006", name: "Startup Pitch Night", date: "Aug 14, 2026", registered: 25, capacity: 40, status: "Published" },
-  { id: "EVT-1007", name: "Photography Club: Golden Hour Walk", date: "Aug 15, 2026", registered: 14, capacity: 25, status: "Draft" },
-  { id: "EVT-1008", name: "Data Structures Study Jam", date: "Aug 16, 2026", registered: 22, capacity: 35, status: "Published" },
-  { id: "EVT-1009", name: "Alumni Networking Night", date: "Aug 19, 2026", registered: 80, capacity: 80, status: "Published" },
-  { id: "EVT-1010", name: "Spring Concert Series (cancelled)", date: "Aug 21, 2026", registered: 0, capacity: 300, status: "Cancelled" },
-  { id: "EVT-1011", name: "Hackathon Kickoff", date: "Aug 23, 2026", registered: 130, capacity: 150, status: "Published" },
-  { id: "EVT-1012", name: "Wellness & Mindfulness Session", date: "Aug 25, 2026", registered: 12, capacity: 40, status: "Draft" },
-  { id: "EVT-1013", name: "Grad School Info Fair", date: "Aug 27, 2026", registered: 88, capacity: 100, status: "Published" },
-  { id: "EVT-1014", name: "Intramural Soccer Semifinal", date: "Aug 29, 2026", registered: 48, capacity: 48, status: "Published" },
-];
-
 const statusStyles: Record<EventStatus, string> = {
   Published: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
   Draft: "bg-zinc-500/10 text-zinc-400 border-zinc-500/20",
@@ -40,32 +26,62 @@ const statusStyles: Record<EventStatus, string> = {
 };
 
 const ROWS_PER_PAGE = 6;
-const ATTENDEE_NAME_POOL = [
-  "Alex Rivera", "Priya Nair", "John Doe", "Maria Chen", "Devon Okafor",
-  "Liam Torres", "Ava Kim", "Noah Bennett", "Sofia Marin", "Ethan Brooks",
-];
 
-function downloadAttendeeCsv(event: EventRow) {
-  const rows = Array.from({ length: Math.min(event.registered, 50) }, (_, i) => {
-    const name = ATTENDEE_NAME_POOL[i % ATTENDEE_NAME_POOL.length];
-    return `${name},${event.id}-${String(i + 1).padStart(3, "0")}@cems.edu`;
-  });
-  const csv = ["Name,Email", ...rows].join("\n");
-  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = `${event.id}-attendees.csv`;
-  link.click();
-  URL.revokeObjectURL(url);
+
+async function downloadAttendeeCsv(event: EventRow) {
+  try {
+    const res = await fetch(`/api/registrations?event_id=${event.id}`);
+    const attendees = await res.json();
+    
+    if (!Array.isArray(attendees)) {
+      throw new Error("Failed to fetch attendees");
+    }
+
+    const rows = attendees.map(a => `"${a.name}","${a.email}"`);
+    const csv = ["Name,Email", ...rows].join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${event.id}-attendees.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+  } catch (err) {
+    console.error("Error downloading CSV:", err);
+    alert("Could not download CSV.");
+  }
 }
 
 export default function ManageEventsPage() {
-  const [events, setEvents] = useState<EventRow[]>(initialEvents);
+  const [events, setEvents] = useState<EventRow[]>([]);
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [deleteTarget, setDeleteTarget] = useState<EventRow | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const { toast } = useToast();
+  const [modalOpen, setModalOpen] = useState(false);
+  const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
+  const [editTarget, setEditTarget] = useState<EventRow | null>(null);
+
+  const fetchEvents = () => {
+    fetch('/api/events')
+      .then(res => res.json())
+      .then(data => {
+        setEvents(data.events.map((e: any) => ({
+          id: e.id,
+          name: e.title,
+          date: e.date,
+          registered: e.attendeeCount,
+          capacity: e.capacity,
+          status: 'Published' as EventStatus
+        })));
+      })
+      .catch(err => console.error(err));
+  };
+
+  useEffect(() => {
+    fetchEvents();
+  }, []);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -90,11 +106,46 @@ export default function ManageEventsPage() {
   async function handleConfirmDelete() {
     if (!deleteTarget) return;
     setIsDeleting(true);
-    // Simulated API call — replace with a real delete request.
-    await new Promise((resolve) => setTimeout(resolve, 800));
-    setEvents((prev) => prev.filter((e) => e.id !== deleteTarget.id));
+    await fetch('/api/events', { method: 'DELETE', body: JSON.stringify({ event_id: deleteTarget.id }) });
+    toast({ type: 'success', title: 'Deleted', description: 'Event deleted successfully.' });
+    fetchEvents();
     setIsDeleting(false);
     setDeleteTarget(null);
+  }
+
+  async function handleModalSubmit(data: EventFormData) {
+    if (modalMode === 'create') {
+      await fetch('/api/events', { 
+        method: 'POST', 
+        body: JSON.stringify({ 
+          name: data.name, 
+          description: data.description, 
+          category: data.category, 
+          date: data.date, 
+          time: data.time, 
+          venue: data.venue, 
+          total_seats: Number(data.capacity) 
+        }) 
+      });
+      toast({ type: 'success', title: 'Created', description: 'Event created successfully.' });
+    } else if (modalMode === 'edit' && editTarget) {
+      await fetch('/api/events', { 
+        method: 'PUT', 
+        body: JSON.stringify({ 
+          event_id: editTarget.id, 
+          name: data.name,
+          description: data.description, 
+          category: data.category, 
+          date: data.date, 
+          time: data.time, 
+          venue: data.venue, 
+          total_seats: Number(data.capacity)
+        }) 
+      });
+      toast({ type: 'success', title: 'Updated', description: 'Event updated successfully.' });
+    }
+    fetchEvents();
+    setModalOpen(false);
   }
 
   return (
@@ -108,19 +159,33 @@ export default function ManageEventsPage() {
             </p>
           </div>
 
-          {/* Global search */}
-          <div className="relative w-full sm:w-72">
-            <Search
-              className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500"
-              strokeWidth={1.75}
-            />
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => handleSearchChange(e.target.value)}
-              placeholder="Search by name or ID…"
-              className="w-full rounded-lg border border-white/10 bg-zinc-900 py-2.5 pl-9 pr-3 text-sm text-zinc-100 placeholder:text-zinc-600 ring-offset-background transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:ring-offset-2 focus:ring-offset-zinc-950"
-            />
+          <div className="flex flex-col sm:flex-row items-center gap-4">
+            {/* Global search */}
+            <div className="relative w-full sm:w-72">
+              <Search
+                className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500"
+                strokeWidth={1.75}
+              />
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => handleSearchChange(e.target.value)}
+                placeholder="Search by name or ID…"
+                className="w-full rounded-lg border border-white/10 bg-zinc-900 py-2.5 pl-9 pr-3 text-sm text-zinc-100 placeholder:text-zinc-600 ring-offset-background transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:ring-offset-2 focus:ring-offset-zinc-950"
+              />
+            </div>
+            
+            <button
+              onClick={() => {
+                setModalMode('create');
+                setEditTarget(null);
+                setModalOpen(true);
+              }}
+              className="flex w-full items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-blue-600 to-indigo-600 px-4 py-2.5 text-sm font-medium text-white transition-all hover:from-blue-500 hover:to-indigo-500 sm:w-auto"
+            >
+              <Plus className="h-4 w-4" />
+              Create Event
+            </button>
           </div>
         </div>
 
@@ -176,7 +241,9 @@ export default function ManageEventsPage() {
                       <td className="whitespace-nowrap px-5 py-3.5 text-right">
                         <RowActionsMenu
                           onEdit={() => {
-                            // Placeholder — wire up to your edit flow (drawer, modal, or route).
+                            setModalMode('edit');
+                            setEditTarget(event);
+                            setModalOpen(true);
                           }}
                           onExport={() => downloadAttendeeCsv(event)}
                           onDelete={() => setDeleteTarget(event)}
@@ -230,6 +297,14 @@ export default function ManageEventsPage() {
         isSubmitting={isDeleting}
         onConfirm={handleConfirmDelete}
         onClose={() => !isDeleting && setDeleteTarget(null)}
+      />
+
+      <AdminEventModal
+        isOpen={modalOpen}
+        onClose={() => setModalOpen(false)}
+        mode={modalMode}
+        initialData={editTarget ? { name: editTarget.name, date: editTarget.date, capacity: String(editTarget.capacity) } : undefined}
+        onSubmit={handleModalSubmit}
       />
     </div>
   );

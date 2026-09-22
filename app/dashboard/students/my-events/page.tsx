@@ -1,112 +1,114 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Ticket } from "lucide-react";
 import type { EventItem } from "@/components/EventCard";
 import RegisteredEventCard from "../../../../components/RegisteredEventCard";
 import CancelConfirmationModal from "../../../../components/CancelConfirmationModal";
 import QRTicketModal from "../../../../components/QRTicketModal";
+import Navbar from '@/components/Navbar';
+import { useToast } from '@/components/ui/Toast';
 
 type Tab = "upcoming" | "past";
 
-const upcomingEvents: EventItem[] = [
-  {
-    id: "evt-1",
-    title: "Intro to Machine Learning Workshop",
-    category: "Workshop",
-    date: "Aug 3",
-    time: "2:00 PM",
-    location: "Engineering Hall, Rm 204",
-    attendeeCount: 42,
-    capacity: 50,
-    gradient: "bg-gradient-to-br from-blue-600 to-indigo-700",
-  },
-  {
-    id: "evt-3",
-    title: "Research Symposium: Climate Systems",
-    category: "Academic",
-    date: "Aug 8",
-    time: "10:00 AM",
-    location: "Science Center Auditorium",
-    attendeeCount: 95,
-    capacity: 120,
-    gradient: "bg-gradient-to-br from-indigo-600 to-violet-700",
-  },
-  {
-    id: "evt-6",
-    title: "Startup Pitch Night",
-    category: "Career",
-    date: "Aug 14",
-    time: "5:00 PM",
-    location: "Innovation Lab",
-    attendeeCount: 25,
-    capacity: 40,
-    gradient: "bg-gradient-to-br from-amber-500 to-orange-600",
-  },
-];
-
-const pastEvents: EventItem[] = [
-  {
-    id: "evt-p1",
-    title: "Welcome Week Kickoff",
-    category: "Social",
-    date: "Jul 12",
-    time: "5:00 PM",
-    location: "Student Union Courtyard",
-    attendeeCount: 210,
-    capacity: 210,
-    gradient: "bg-gradient-to-br from-pink-500 to-rose-600",
-  },
-  {
-    id: "evt-p2",
-    title: "Career Fair: Tech & Engineering",
-    category: "Career",
-    date: "Jul 18",
-    time: "11:00 AM",
-    location: "Convocation Center",
-    attendeeCount: 400,
-    capacity: 400,
-    gradient: "bg-gradient-to-br from-amber-500 to-orange-600",
-  },
-  {
-    id: "evt-p3",
-    title: "Intramural Soccer Opener",
-    category: "Sports",
-    date: "Jul 22",
-    time: "6:00 PM",
-    location: "West Athletic Field",
-    attendeeCount: 48,
-    capacity: 48,
-    gradient: "bg-gradient-to-br from-emerald-600 to-teal-700",
-  },
-];
-
 export default function MyEventsPage() {
   const [activeTab, setActiveTab] = useState<Tab>("upcoming");
-  const [registered, setRegistered] = useState<EventItem[]>(upcomingEvents);
+  const [upcomingEvents, setUpcomingEvents] = useState<EventItem[]>([]);
+  const [pastEvents, setPastEvents] = useState<EventItem[]>([]);
+  const [userId, setUserId] = useState("");
+  const { toast } = useToast();
+
+  const fetchRegistrations = async (uid: string) => {
+    try {
+      const upRes = await fetch(`/api/registrations?student_id=${uid}`);
+      const upData = await upRes.json();
+      
+      const pastRes = await fetch(`/api/registrations?student_id=${uid}&include_past=true`);
+      const pastData = await pastRes.json();
+      
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      const mapToEventItem = (row: any) => ({
+        id: row.event_id,
+        title: row.name,
+        category: row.category || 'Academic', 
+        date: row.date ? new Date(row.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'TBD',
+        time: row.time || 'TBD',
+        location: row.venue || 'TBD',
+        attendeeCount: Number(row.total_registered) || 0,
+        capacity: Number(row.total_seats) || 0,
+        gradient: 'bg-gradient-to-br from-indigo-600 to-violet-700'
+      });
+
+      const upEvents = (Array.isArray(upData) ? upData : [])
+        .filter((e: any) => new Date(e.date) >= today)
+        .map(mapToEventItem);
+        
+      const allPastEvents = (Array.isArray(pastData) ? pastData : [])
+        .filter((e: any) => new Date(e.date) < today)
+        .map(mapToEventItem);
+
+      setUpcomingEvents(upEvents);
+      setPastEvents(allPastEvents);
+    } catch (err) {
+      console.error("Failed to fetch registrations", err);
+    }
+  };
+
+  useEffect(() => {
+    async function init() {
+      try {
+        const authRes = await fetch('/api/auth/me');
+        if (authRes.ok) {
+          const { user } = await authRes.json();
+          if (user && user.user_id) {
+            setUserId(user.user_id);
+            await fetchRegistrations(user.user_id);
+          }
+        }
+      } catch (err) {}
+    }
+    init();
+  }, []);
 
   const [cancelTarget, setCancelTarget] = useState<EventItem | null>(null);
   const [isCancelling, setIsCancelling] = useState(false);
   const [ticketTarget, setTicketTarget] = useState<EventItem | null>(null);
 
   const activeList = useMemo(
-    () => (activeTab === "upcoming" ? registered : pastEvents),
-    [activeTab, registered]
+    () => (activeTab === "upcoming" ? upcomingEvents : pastEvents),
+    [activeTab, upcomingEvents, pastEvents]
   );
 
   async function handleConfirmCancel() {
-    if (!cancelTarget) return;
+    if (!cancelTarget || !userId) return;
     setIsCancelling(true);
-    // Simulated API call — replace with a real cancellation request.
-    await new Promise((resolve) => setTimeout(resolve, 900));
-    setRegistered((prev) => prev.filter((e) => e.id !== cancelTarget.id));
-    setIsCancelling(false);
-    setCancelTarget(null);
+    try {
+      const res = await fetch('/api/registrations', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ student_id: userId, event_id: cancelTarget.id })
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || 'Failed to cancel');
+      }
+      toast({ type: 'success', title: 'Registration cancelled' });
+      await fetchRegistrations(userId);
+    } catch (err: any) {
+      toast({ type: 'error', title: 'Cancellation failed', description: err.message });
+    } finally {
+      setIsCancelling(false);
+      setCancelTarget(null);
+    }
   }
 
   return (
-    <div className="min-h-screen bg-zinc-950 pb-16">
+    <>
+      <Navbar />
+      <div className="min-h-screen bg-zinc-950 pb-16">
       <div className="mx-auto max-w-6xl px-6 pt-10">
         <div className="mb-6 flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-zinc-900/40">
@@ -200,5 +202,6 @@ export default function MyEventsPage() {
         onClose={() => setTicketTarget(null)}
       />
     </div>
+    </>
   );
 }

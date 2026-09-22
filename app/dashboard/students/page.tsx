@@ -1,17 +1,15 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { CalendarCheck, CalendarClock, CompassIcon, Search, SlidersHorizontal } from "lucide-react";
 import EventCard, { type EventItem } from "../../../components/EventCard";
 
-const currentUser = {
-  name: "Priya",
-  eventsAttended: 12,
-  upcoming: 3,
-};
+import Navbar from '@/components/Navbar';
+import { useToast } from '@/components/ui/Toast';
+import { EventCardSkeletonGrid } from '@/components/LoadingSkeleton';
 
-const mockEvents: EventItem[] = [
+const defaultMockEvents: EventItem[] = [
   {
     id: "evt-1",
     title: "Intro to Machine Learning Workshop",
@@ -105,24 +103,137 @@ const mockEvents: EventItem[] = [
 const categories = ["All", "Workshop", "Social", "Academic", "Sports", "Career"];
 
 export default function StudentDiscoveryPage() {
+  const [currentUser, setCurrentUser] = useState({ name: "Priya", eventsAttended: 12, upcoming: 3, userId: "" });
+  const [events, setEvents] = useState<EventItem[]>(defaultMockEvents);
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("All");
   const [availableOnly, setAvailableOnly] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const { toast } = useToast();
+
+  const [registeredIds, setRegisteredIds] = useState<Set<string>>(new Set());
+
+  const fetchEvents = async () => {
+    try {
+      const res = await fetch('/api/events');
+      const data = await res.json();
+      if (data.events && data.events.length > 0) {
+        setEvents(data.events);
+      }
+    } catch (err) {
+      console.error("Failed to fetch events from DB", err);
+    }
+  };
+
+  useEffect(() => {
+    async function init() {
+      setLoading(true);
+      try {
+        const authRes = await fetch('/api/auth/me');
+        if (authRes.ok) {
+          const { user } = await authRes.json();
+          if (user) {
+            const upRes = await fetch(`/api/registrations?student_id=${user.user_id}`);
+            const upcoming = await upRes.json();
+            const pastRes = await fetch(`/api/registrations?student_id=${user.user_id}&include_past=true`);
+            const allRegs = await pastRes.json();
+            
+            const upCount = Array.isArray(upcoming) ? upcoming.length : 0;
+            const allCount = Array.isArray(allRegs) ? allRegs.length : 0;
+            
+            if (Array.isArray(allRegs)) {
+              setRegisteredIds(new Set(allRegs.map((r: any) => r.event_id)));
+            }
+            
+            setCurrentUser({
+              userId: user.user_id,
+              name: user.name,
+              upcoming: upCount,
+              eventsAttended: allCount - upCount
+            });
+          }
+        }
+      } catch (err) {
+        console.error("Auth fetch failed:", err);
+      }
+      await fetchEvents();
+      setLoading(false);
+    }
+    init();
+  }, []);
+
+  async function handleRegister(eventId: string) {
+    if (!currentUser.userId) {
+      toast({ type: 'error', title: 'Registration failed', description: 'Not logged in' });
+      return;
+    }
+    try {
+      const res = await fetch('/api/registrations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ student_id: currentUser.userId, event_id: eventId })
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || 'Failed to register');
+      }
+      toast({ type: 'success', title: 'Registration confirmed!' });
+      setRegisteredIds(prev => new Set(prev).add(eventId));
+      setCurrentUser(prev => ({
+        ...prev,
+        upcoming: prev.upcoming + 1,
+        eventsAttended: prev.eventsAttended + 1
+      }));
+      await fetchEvents();
+    } catch (err: any) {
+      toast({ type: 'error', title: 'Registration failed', description: err.message });
+    }
+  }
+
+  async function handleUnregister(eventId: string) {
+    if (!currentUser.userId) return;
+    try {
+      const res = await fetch('/api/registrations', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ student_id: currentUser.userId, event_id: eventId })
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || 'Failed to cancel');
+      }
+      toast({ type: 'success', title: 'Registration cancelled' });
+      setRegisteredIds(prev => {
+        const next = new Set(prev);
+        next.delete(eventId);
+        return next;
+      });
+      setCurrentUser(prev => ({
+        ...prev,
+        upcoming: Math.max(0, prev.upcoming - 1),
+      }));
+      await fetchEvents();
+    } catch (err: any) {
+      toast({ type: 'error', title: 'Cancellation failed', description: err.message });
+    }
+  }
 
   const filteredEvents = useMemo(() => {
-    return mockEvents.filter((event) => {
+    return events.filter((event) => {
       const matchesSearch =
         search.trim() === "" || event.title.toLowerCase().includes(search.trim().toLowerCase());
       const matchesCategory = category === "All" || event.category === category;
       const matchesAvailability = !availableOnly || event.attendeeCount < event.capacity;
       return matchesSearch && matchesCategory && matchesAvailability;
     });
-  }, [search, category, availableOnly]);
+  }, [events, search, category, availableOnly]);
 
   const hasActiveFilters = search.trim() !== "" || category !== "All" || availableOnly;
 
   return (
-    <div className="min-h-screen bg-zinc-950 pb-16">
+    <>
+      <Navbar />
+      <div className="min-h-screen bg-zinc-950 pb-16">
       <div className="mx-auto max-w-6xl px-6 pt-10">
         {/* Hero */}
         <section className="mb-8">
@@ -196,17 +307,16 @@ export default function StudentDiscoveryPage() {
               type="button"
               onClick={() => setAvailableOnly((v) => !v)}
               aria-pressed={availableOnly}
-              className="flex items-center gap-2 rounded-lg border border-white/10 bg-zinc-900 py-2.5 pl-3 pr-3.5 text-sm text-zinc-300 transition-colors hover:border-white/20"
+              className="flex items-center gap-2 shrink-0 rounded-lg border border-white/10 bg-zinc-900 py-2.5 pl-3 pr-3.5 text-sm text-zinc-300 transition-colors hover:border-white/20"
             >
               <span
-                className={`relative h-5 w-9 rounded-full transition-colors duration-200 ${
+                className={`relative inline-flex h-5 w-9 shrink-0 rounded-full transition-colors duration-200 ${
                   availableOnly ? "bg-blue-600" : "bg-zinc-700"
                 }`}
               >
                 <span
-                  className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform duration-200 ${
-                    availableOnly ? "translate-x-4" : "translate-x-0.5"
-                  }`}
+                  className="absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-all duration-200"
+                  style={{ left: availableOnly ? '18px' : '2px' }}
                 />
               </span>
               Available only
@@ -216,14 +326,16 @@ export default function StudentDiscoveryPage() {
 
         {/* Grid */}
         <AnimatePresence mode="popLayout">
-          {filteredEvents.length > 0 ? (
+          {loading ? (
+            <EventCardSkeletonGrid />
+          ) : filteredEvents.length > 0 ? (
             <motion.div
               layout
               className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
             >
               <AnimatePresence mode="popLayout">
                 {filteredEvents.map((event) => (
-                  <EventCard key={event.id} event={event} />
+                  <EventCard key={event.id} event={event} onRegister={handleRegister} onUnregister={handleUnregister} isRegistered={registeredIds.has(event.id)} />
                 ))}
               </AnimatePresence>
             </motion.div>
@@ -262,5 +374,6 @@ export default function StudentDiscoveryPage() {
         </AnimatePresence>
       </div>
     </div>
+    </>
   );
 }

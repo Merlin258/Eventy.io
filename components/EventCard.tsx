@@ -23,7 +23,7 @@ const categoryStyles: Record<string, string> = {
   Career: "bg-amber-500/10 text-amber-300 border-amber-500/20",
 };
 
-export default function EventCard({ event }: { event: EventItem }) {
+export default function EventCard({ event, onRegister, onUnregister, isRegistered }: { event: EventItem; onRegister?: (eventId: string) => void; onUnregister?: (eventId: string) => void; isRegistered?: boolean }) {
   const spotsLeft = event.capacity - event.attendeeCount;
   const isFull = spotsLeft <= 0;
 
@@ -79,10 +79,23 @@ export default function EventCard({ event }: { event: EventItem }) {
         </div>
 
         <button
-          disabled={isFull}
-          className="mt-1 w-full rounded-lg border border-white/10 bg-white/5 py-2 text-xs font-medium text-zinc-200 transition-colors hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
+          disabled={isFull && !isRegistered}
+          onClick={() => {
+            if (isRegistered) {
+              onUnregister?.(event.id);
+            } else if (!isFull) {
+              onRegister?.(event.id);
+            }
+          }}
+          className={`mt-1 w-full rounded-lg border py-2 text-xs font-medium transition-colors ${
+            isRegistered 
+              ? "border-red-500/30 bg-red-500/10 text-red-400 hover:bg-red-500/20 cursor-pointer" 
+              : isFull
+                ? "border-white/10 bg-white/5 text-zinc-200 cursor-not-allowed opacity-40"
+                : "border-white/10 bg-white/5 text-zinc-200 hover:bg-white/10"
+          }`}
         >
-          {isFull ? "Waitlist" : "Reserve spot"}
+          {isRegistered ? "Cancel Registration ✕" : isFull ? "Waitlist" : "Reserve spot"}
         </button>
       </div>
     </motion.div>
