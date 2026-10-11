@@ -2,11 +2,12 @@
 
 import { useMemo, useState, useEffect } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Ticket } from "lucide-react";
+import { Download, Ticket } from "lucide-react";
 import type { EventItem } from "@/components/EventCard";
 import RegisteredEventCard from "../../../../components/RegisteredEventCard";
 import CancelConfirmationModal from "../../../../components/CancelConfirmationModal";
 import QRTicketModal from "../../../../components/QRTicketModal";
+import EventSummaryModal from "@/components/EventSummaryModal";
 import Navbar from '@/components/Navbar';
 import { useToast } from '@/components/ui/Toast';
 
@@ -17,6 +18,8 @@ export default function MyEventsPage() {
   const [upcomingEvents, setUpcomingEvents] = useState<EventItem[]>([]);
   const [pastEvents, setPastEvents] = useState<EventItem[]>([]);
   const [userId, setUserId] = useState("");
+  const [studentName, setStudentName] = useState("Student");
+  const [summaryTarget, setSummaryTarget] = useState<EventItem | null>(null);
   const { toast } = useToast();
 
   const fetchRegistrations = async (uid: string) => {
@@ -33,6 +36,7 @@ export default function MyEventsPage() {
       const mapToEventItem = (row: any) => ({
         id: row.event_id,
         title: row.name,
+        description: row.description || '',
         category: row.category || 'Academic', 
         date: row.date ? new Date(row.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'TBD',
         time: row.time || 'TBD',
@@ -65,6 +69,7 @@ export default function MyEventsPage() {
           const { user } = await authRes.json();
           if (user && user.user_id) {
             setUserId(user.user_id);
+            setStudentName(user.name || "Student");
             await fetchRegistrations(user.user_id);
           }
         }
@@ -72,6 +77,37 @@ export default function MyEventsPage() {
     }
     init();
   }, []);
+
+  function exportAllSummary() {
+    const allEvents = [
+      ...upcomingEvents.map((e) => ({ ...e, statusLabel: "Upcoming" })),
+      ...pastEvents.map((e) => ({ ...e, statusLabel: "Attended" })),
+    ];
+    if (allEvents.length === 0) {
+      toast({ type: 'info', title: 'No events to export', description: 'You have not registered for any events yet.' });
+      return;
+    }
+    const headers = ["Event ID", "Title", "Category", "Date", "Time", "Location", "Description", "Status"];
+    const rows = allEvents.map((e) => [
+      `"${e.id}"`,
+      `"${e.title.replace(/"/g, '""')}"`,
+      `"${e.category}"`,
+      `"${e.date}"`,
+      `"${e.time}"`,
+      `"${e.location}"`,
+      `"${(e.description || '').replace(/"/g, '""')}"`,
+      `"${e.statusLabel}"`
+    ].join(","));
+    const csvContent = [headers.join(","), ...rows].join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "my-events-summary.csv";
+    link.click();
+    URL.revokeObjectURL(url);
+    toast({ type: 'success', title: 'Summary Exported', description: 'Downloaded my-events-summary.csv' });
+  }
 
   const [cancelTarget, setCancelTarget] = useState<EventItem | null>(null);
   const [isCancelling, setIsCancelling] = useState(false);
@@ -110,14 +146,24 @@ export default function MyEventsPage() {
       <Navbar />
       <div className="min-h-screen bg-zinc-950 pb-16">
       <div className="mx-auto max-w-6xl px-6 pt-10">
-        <div className="mb-6 flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-zinc-900/40">
-            <Ticket className="h-4.5 w-4.5 text-zinc-400" strokeWidth={1.75} />
+        <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-zinc-900/40">
+              <Ticket className="h-4.5 w-4.5 text-zinc-400" strokeWidth={1.75} />
+            </div>
+            <div>
+              <h1 className="text-xl font-semibold tracking-tight text-zinc-100">My Events</h1>
+              <p className="text-sm text-zinc-500">Everything you&apos;ve registered for.</p>
+            </div>
           </div>
-          <div>
-            <h1 className="text-xl font-semibold tracking-tight text-zinc-100">My Events</h1>
-            <p className="text-sm text-zinc-500">Everything you&apos;ve registered for.</p>
-          </div>
+
+          <button
+            onClick={exportAllSummary}
+            className="flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-3.5 py-2 text-xs font-medium text-zinc-300 transition-colors hover:bg-white/10 hover:text-zinc-100 w-fit"
+          >
+            <Download className="h-3.5 w-3.5 text-zinc-400" />
+            Export Summary (CSV)
+          </button>
         </div>
 
         {/* Tabs */}
@@ -165,6 +211,7 @@ export default function MyEventsPage() {
                       status={activeTab}
                       onViewTicket={() => setTicketTarget(event)}
                       onCancel={() => setCancelTarget(event)}
+                      onViewSummary={() => setSummaryTarget(event)}
                     />
                   ))}
                 </AnimatePresence>
@@ -200,6 +247,13 @@ export default function MyEventsPage() {
         time={ticketTarget?.time ?? ""}
         location={ticketTarget?.location ?? ""}
         onClose={() => setTicketTarget(null)}
+      />
+
+      <EventSummaryModal
+        isOpen={summaryTarget !== null}
+        event={summaryTarget}
+        studentName={studentName}
+        onClose={() => setSummaryTarget(null)}
       />
     </div>
     </>

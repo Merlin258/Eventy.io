@@ -6,6 +6,7 @@ import { CalendarDays, MapPin, Users } from "lucide-react";
 export interface EventItem {
   id: string;
   title: string;
+  description?: string;
   category: string;
   date: string;
   time: string;
@@ -26,6 +27,19 @@ const categoryStyles: Record<string, string> = {
 export default function EventCard({ event, onRegister, onUnregister, isRegistered }: { event: EventItem; onRegister?: (eventId: string) => void; onUnregister?: (eventId: string) => void; isRegistered?: boolean }) {
   const spotsLeft = event.capacity - event.attendeeCount;
   const isFull = spotsLeft <= 0;
+
+  // Detect whether the event date has already passed
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const isPast = (() => {
+    if (!event.date || event.date === "TBD") return false;
+    const parsed = new Date(event.date);
+    if (isNaN(parsed.getTime())) return false;
+    if (parsed.getFullYear() === 2001) {
+      parsed.setFullYear(today.getFullYear());
+    }
+    return parsed < today;
+  })();
 
   return (
     <motion.div
@@ -51,7 +65,14 @@ export default function EventCard({ event, onRegister, onUnregister, isRegistere
 
       {/* Body */}
       <div className="flex flex-1 flex-col gap-3 p-4">
-        <h3 className="text-sm font-semibold leading-snug text-zinc-100">{event.title}</h3>
+        <div>
+          <h3 className="text-sm font-semibold leading-snug text-zinc-100">{event.title}</h3>
+          {event.description && (
+            <p className="mt-1 line-clamp-2 text-xs text-zinc-400">
+              {event.description}
+            </p>
+          )}
+        </div>
 
         <div className="space-y-1.5 text-xs text-zinc-400">
           <div className="flex items-center gap-1.5">
@@ -71,32 +92,41 @@ export default function EventCard({ event, onRegister, onUnregister, isRegistere
           </div>
           <span
             className={`text-xs font-medium ${
-              isFull ? "text-zinc-600" : spotsLeft <= 5 ? "text-amber-400" : "text-emerald-400"
+              isPast ? "text-zinc-600" : isFull ? "text-zinc-600" : spotsLeft <= 5 ? "text-amber-400" : "text-emerald-400"
             }`}
           >
-            {isFull ? "Full" : `${spotsLeft} spots left`}
+            {isPast ? "Ended" : isFull ? "Full" : `${spotsLeft} spots left`}
           </span>
         </div>
 
-        <button
-          disabled={isFull && !isRegistered}
-          onClick={() => {
-            if (isRegistered) {
-              onUnregister?.(event.id);
-            } else if (!isFull) {
-              onRegister?.(event.id);
-            }
-          }}
-          className={`mt-1 w-full rounded-lg border py-2 text-xs font-medium transition-colors ${
-            isRegistered 
-              ? "border-red-500/30 bg-red-500/10 text-red-400 hover:bg-red-500/20 cursor-pointer" 
-              : isFull
-                ? "border-white/10 bg-white/5 text-zinc-200 cursor-not-allowed opacity-40"
-                : "border-white/10 bg-white/5 text-zinc-200 hover:bg-white/10"
-          }`}
-        >
-          {isRegistered ? "Cancel Registration ✕" : isFull ? "Waitlist" : "Reserve spot"}
-        </button>
+        {isPast ? (
+          <button
+            disabled
+            className="mt-1 w-full cursor-not-allowed rounded-lg border border-white/5 bg-white/5 py-2 text-xs font-medium text-zinc-500 opacity-50"
+          >
+            Event Ended
+          </button>
+        ) : (
+          <button
+            disabled={isFull && !isRegistered}
+            onClick={() => {
+              if (isRegistered) {
+                onUnregister?.(event.id);
+              } else if (!isFull) {
+                onRegister?.(event.id);
+              }
+            }}
+            className={`mt-1 w-full rounded-lg border py-2 text-xs font-medium transition-colors ${
+              isRegistered 
+                ? "border-red-500/30 bg-red-500/10 text-red-400 hover:bg-red-500/20 cursor-pointer" 
+                : isFull
+                  ? "border-white/10 bg-white/5 text-zinc-200 cursor-not-allowed opacity-40"
+                  : "border-white/10 bg-white/5 text-zinc-200 hover:bg-white/10"
+            }`}
+          >
+            {isRegistered ? "Cancel Registration ✕" : isFull ? "Waitlist" : "Reserve spot"}
+          </button>
+        )}
       </div>
     </motion.div>
   );

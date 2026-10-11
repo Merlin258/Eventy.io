@@ -3,6 +3,7 @@
 import { useMemo, useState, useEffect } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { CalendarCheck, CalendarClock, CompassIcon, Search, SlidersHorizontal } from "lucide-react";
+import Link from "next/link";
 import EventCard, { type EventItem } from "../../../components/EventCard";
 
 import Navbar from '@/components/Navbar';
@@ -162,9 +163,26 @@ export default function StudentDiscoveryPage() {
     init();
   }, []);
 
+  function isEventPast(dateStr?: string) {
+    if (!dateStr || dateStr === "TBD") return false;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const parsed = new Date(dateStr);
+    if (isNaN(parsed.getTime())) return false;
+    if (parsed.getFullYear() === 2001) {
+      parsed.setFullYear(today.getFullYear());
+    }
+    return parsed < today;
+  }
+
   async function handleRegister(eventId: string) {
     if (!currentUser.userId) {
       toast({ type: 'error', title: 'Registration failed', description: 'Not logged in' });
+      return;
+    }
+    const targetEvent = events.find(e => e.id === eventId);
+    if (targetEvent && isEventPast(targetEvent.date)) {
+      toast({ type: 'error', title: 'Registration closed', description: 'Cannot register for past events.' });
       return;
     }
     try {
@@ -192,6 +210,11 @@ export default function StudentDiscoveryPage() {
 
   async function handleUnregister(eventId: string) {
     if (!currentUser.userId) return;
+    const targetEvent = events.find(e => e.id === eventId);
+    if (targetEvent && isEventPast(targetEvent.date)) {
+      toast({ type: 'error', title: 'Action not allowed', description: 'Cannot cancel registration for past events.' });
+      return;
+    }
     try {
       const res = await fetch('/api/registrations', {
         method: 'DELETE',
@@ -246,7 +269,7 @@ export default function StudentDiscoveryPage() {
 
           {/* Stats banner */}
           <div className="mt-6 grid grid-cols-2 gap-4 sm:max-w-md">
-            <div className="rounded-xl border border-white/10 bg-zinc-900/40 p-4 backdrop-blur-xl">
+            <Link href="/dashboard/students/my-events" className="rounded-xl border border-white/10 bg-zinc-900/40 p-4 backdrop-blur-xl transition-colors hover:border-white/20">
               <div className="flex items-center gap-2 text-zinc-500">
                 <CalendarCheck className="h-4 w-4" strokeWidth={1.75} />
                 <span className="text-xs">Events attended</span>
@@ -254,14 +277,14 @@ export default function StudentDiscoveryPage() {
               <p className="mt-2 text-2xl font-semibold text-zinc-100">
                 {currentUser.eventsAttended}
               </p>
-            </div>
-            <div className="rounded-xl border border-white/10 bg-zinc-900/40 p-4 backdrop-blur-xl">
+            </Link>
+            <Link href="/dashboard/students/my-events" className="rounded-xl border border-white/10 bg-zinc-900/40 p-4 backdrop-blur-xl transition-colors hover:border-white/20">
               <div className="flex items-center gap-2 text-zinc-500">
                 <CalendarClock className="h-4 w-4" strokeWidth={1.75} />
                 <span className="text-xs">Upcoming</span>
               </div>
               <p className="mt-2 text-2xl font-semibold text-zinc-100">{currentUser.upcoming}</p>
-            </div>
+            </Link>
           </div>
         </section>
 

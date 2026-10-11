@@ -2,7 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { Bell, ChevronDown, LogOut, User as UserIcon } from "lucide-react";
+import { usePathname } from "next/navigation";
+import { Bell, ChevronDown, LogOut, Ticket, User as UserIcon } from "lucide-react";
 
 interface Notification {
   notification_id: number;
@@ -10,6 +11,7 @@ interface Notification {
 }
 
 export default function Navbar() {
+  const pathname = usePathname();
   const [user, setUser] = useState<{ name: string; email: string; user_id: string; role: string; initials: string } | null>(null);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
@@ -73,11 +75,37 @@ export default function Navbar() {
     <header className="sticky top-0 z-50 border-b border-white/5 bg-zinc-950/50 backdrop-blur-md">
       <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-6">
         {/* Logo */}
-        <Link href="/" className="flex items-center gap-2">
+        <Link href={user?.role === "student" ? "/dashboard/students" : "/"} className="flex items-center gap-2">
           <span className="bg-gradient-to-r from-white via-zinc-200 to-zinc-500 bg-clip-text text-lg font-semibold tracking-tight text-transparent">
             CEMS
           </span>
         </Link>
+
+        {/* Student navigation tabs */}
+        {user?.role === "student" && (
+          <nav className="flex items-center gap-1">
+            <Link
+              href="/dashboard/students"
+              className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
+                pathname === "/dashboard/students"
+                  ? "bg-white/10 text-zinc-100"
+                  : "text-zinc-400 hover:bg-white/5 hover:text-zinc-200"
+              }`}
+            >
+              Discover
+            </Link>
+            <Link
+              href="/dashboard/students/my-events"
+              className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
+                pathname === "/dashboard/students/my-events"
+                  ? "bg-white/10 text-zinc-100"
+                  : "text-zinc-400 hover:bg-white/5 hover:text-zinc-200"
+              }`}
+            >
+              My Events
+            </Link>
+          </nav>
+        )}
 
         {/* Right side controls */}
         <div className="flex items-center gap-2">
@@ -165,6 +193,12 @@ export default function Navbar() {
                     <UserIcon className="h-4 w-4" strokeWidth={1.75} />
                     Profile
                   </Link>
+                  {user?.role === "student" && (
+                    <Link href="/dashboard/students/my-events" className="flex w-full items-center gap-2 px-4 py-2 text-left text-zinc-300 hover:bg-white/5 hover:text-zinc-100">
+                      <Ticket className="h-4 w-4" strokeWidth={1.75} />
+                      My Events
+                    </Link>
+                  )}
                 </div>
                 <div className="border-t border-white/5 py-1 text-sm">
                   <button

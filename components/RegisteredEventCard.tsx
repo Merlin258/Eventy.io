@@ -9,6 +9,7 @@ interface RegisteredEventCardProps {
   status: "upcoming" | "past";
   onViewTicket?: () => void;
   onCancel?: () => void;
+  onViewSummary?: () => void;
 }
 
 const categoryStyles: Record<string, string> = {
@@ -24,6 +25,7 @@ export default function RegisteredEventCard({
   status,
   onViewTicket,
   onCancel,
+  onViewSummary,
 }: RegisteredEventCardProps) {
   return (
     <motion.div
@@ -53,7 +55,14 @@ export default function RegisteredEventCard({
       </div>
 
       <div className="flex flex-1 flex-col gap-3 p-4">
-        <h3 className="text-sm font-semibold leading-snug text-zinc-100">{event.title}</h3>
+        <div>
+          <h3 className="text-sm font-semibold leading-snug text-zinc-100">{event.title}</h3>
+          {event.description && (
+            <p className="mt-1 line-clamp-2 text-xs text-zinc-400">
+              {event.description}
+            </p>
+          )}
+        </div>
 
         <div className="space-y-1.5 text-xs text-zinc-400">
           <div className="flex items-center gap-1.5">
@@ -85,7 +94,10 @@ export default function RegisteredEventCard({
           </div>
         ) : (
           <div className="mt-auto pt-2">
-            <button className="w-full rounded-lg border border-white/10 bg-white/5 py-2 text-xs font-medium text-zinc-400 transition-colors hover:bg-white/10 hover:text-zinc-200">
+            <button
+              onClick={onViewSummary}
+              className="w-full rounded-lg border border-white/10 bg-white/5 py-2 text-xs font-medium text-zinc-400 transition-colors hover:bg-white/10 hover:text-zinc-200 cursor-pointer"
+            >
               View summary
             </button>
           </div>

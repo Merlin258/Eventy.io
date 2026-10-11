@@ -64,6 +64,7 @@ def get_events():
             {
                 "id": row["event_id"],
                 "title": row["name"],
+                "description": row.get("description") or "",
                 "category": row.get("category") or "Academic",
                 "date": _format_date(row.get("date")),
                 "time": _format_time(row.get("time")),

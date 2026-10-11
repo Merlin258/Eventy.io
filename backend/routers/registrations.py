@@ -1,3 +1,5 @@
+import datetime
+
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 from typing import Optional
@@ -61,6 +63,14 @@ def create_registration(body: RegistrationCreate):
         if not body.student_id or not body.event_id:
             raise HTTPException(status_code=400, detail="student_id and event_id are required")
 
+        # Reject registration for events that have already ended
+        event_rows = query("SELECT date FROM Events WHERE event_id = %s", [body.event_id])
+        if not event_rows:
+            raise HTTPException(status_code=404, detail="Event not found")
+        event_date = event_rows[0].get("date")
+        if event_date and event_date < datetime.date.today():
+            raise HTTPException(status_code=400, detail="Cannot register for past events")
+
         query(
             "INSERT INTO Registrations (student_id, event_id, registration_time) VALUES (%s, %s, NOW())",
             [body.student_id, body.event_id],
@@ -81,6 +91,14 @@ def delete_registration(body: RegistrationDelete):
     try:
         if not body.student_id or not body.event_id:
             raise HTTPException(status_code=400, detail="student_id and event_id are required")
+
+        # Reject cancellation for events that have already ended
+        event_rows = query("SELECT date FROM Events WHERE event_id = %s", [body.event_id])
+        if not event_rows:
+            raise HTTPException(status_code=404, detail="Event not found")
+        event_date = event_rows[0].get("date")
+        if event_date and event_date < datetime.date.today():
+            raise HTTPException(status_code=400, detail="Cannot cancel registration for events that have already ended")
 
         query(
             "DELETE FROM Registrations WHERE student_id = %s AND event_id = %s",

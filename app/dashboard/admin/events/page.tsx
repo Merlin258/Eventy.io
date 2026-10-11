@@ -106,7 +106,7 @@ export default function ManageEventsPage() {
   async function handleConfirmDelete() {
     if (!deleteTarget) return;
     setIsDeleting(true);
-    await fetch('/api/events', { method: 'DELETE', body: JSON.stringify({ event_id: deleteTarget.id }) });
+    await fetch('/api/events', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ event_id: deleteTarget.id }) });
     toast({ type: 'success', title: 'Deleted', description: 'Event deleted successfully.' });
     fetchEvents();
     setIsDeleting(false);
@@ -116,7 +116,8 @@ export default function ManageEventsPage() {
   async function handleModalSubmit(data: EventFormData) {
     if (modalMode === 'create') {
       await fetch('/api/events', { 
-        method: 'POST', 
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           name: data.name, 
           description: data.description, 
@@ -130,7 +131,8 @@ export default function ManageEventsPage() {
       toast({ type: 'success', title: 'Created', description: 'Event created successfully.' });
     } else if (modalMode === 'edit' && editTarget) {
       await fetch('/api/events', { 
-        method: 'PUT', 
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           event_id: editTarget.id, 
           name: data.name,
